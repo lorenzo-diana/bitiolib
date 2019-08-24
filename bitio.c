@@ -94,15 +94,19 @@ bit_flush(struct bitio *b)
 	}
 	if (b->bitio_wp%=8)	// if data in buffer is not multiple of 8
 		dst[0]=start[0];	// move remaining bit on top of the buffer
+    
 	return len_bytes*8;	// return how many bit were written
 
 fail:	// if write() fail
-	for (x=0; x<left; x++)	// copy remaining byte on the top of the buffer
-		dst[x]=start[x];
-	if (b->bitio_wp%8)	// if data in buffer is not multiple of 8
-		dst[x]=start[x];	// move remaining bit on top of the buffer
-	b->bitio_wp-=(start-dst)*8;	// update write index
-	return (start-dst)*8;	// return how many bit were written
+    if (dst!=start) {
+    	for (x=0; x<left; x++)	// copy remaining byte on the top of the buffer
+    		dst[x]=start[x];
+    	if (b->bitio_wp%8)	// if data in buffer is not multiple of 8
+    		dst[x]=start[x];	// move remaining bit on top of the buffer
+    	b->bitio_wp-=(start-dst)*8;	// update write index
+    	return (start-dst)*8;	// return how many bit were written
+    }
+    return 0;
 }
 
 /*	Get the number of bit that rappresent the pad.
@@ -110,18 +114,19 @@ fail:	// if write() fail
  *	@param	The byte that contain the pad.
  *
  *	@return	The number of bit to be deleted in order to remove the pad from the
- *			file. This number is between 1 and 8
+ *			file. This number is between 1 and 8. If 9 is returned this means
+ *          that last_byte does not cotain a valid pad value.
  *
  *	To see how pad works look at bit_close() documentation.
  */
 uint8_t
 remove_padding(char last_byte) {
-	int8_t count;
-	for (count=6; count>=0; count--)	//while two consecutive bit are differen
-		if ( (last_byte & (((uint8_t)1)<<count)) != (last_byte & (((uint8_t)1)<<(count+1))) )
-			break ;
-	
-	return 8-count-1; // number of bit that make up the pad
+	uint8_t val=0x80, count=1;
+    while (val & last_byte) {
+        val>>=1;
+        count++;
+    }
+    return count;
 }
 
 /*	Try to read nb bit from file rappresent by b and store the actual number of
@@ -131,12 +136,12 @@ remove_padding(char last_byte) {
  *	@param	b, pointer to a bitio file.
  *			nb, number of bit to be read from b.
  *			stat, pointer to an integer that will contain tha actual number of
- *			bit read from b.
+ *			bits read from b.
  *
  *	@return	An integer that contain the bit read from b. First bit read is
- *			stored in the first least significant bit of this integer, the
+ *			stored in the least significant bit of the returned value, the
  *			second bit read is stored in the second least significant bit of the
- *			integer, and so on.
+ *			returned value, and so on.
  *			Example: If we read only 1 bit and then we apply right shift we lose
  *					 the bit read.
  *				int stat;
@@ -147,15 +152,15 @@ remove_padding(char last_byte) {
  *			How stat parameter is update.
  *			stat will always contain the actual number of bit read.
  *			On success stat is a positive value that rappresent the number of
- *			bit read and store in the return value.
+ *			bit read and stored in the returned value.
  *			If EOF is reached before reading nb bits stat will contain the
- *			number of bit read multiply by -1. If an error occurred before
- *			reading nb bits stat will contain the number of bit read left
+ *			number of bit read multiplied by -1. If an error occurred before
+ *			reading nb bits stat will contain the number of bit read, left
  *			shifted by 8 position and multiply by -1.
  *
  *			Example: If stat is a positive value everything went well, otherwise
- *					 if EOF is reached this value is stored in the leas
- *					 significant byte of stat, if an error occurred then this
+ *					 if EOF is reached its value is stored in the leas
+ *					 significant byte of stat, if an error occurred then its
  *					 value is stored in the second least significant byte.
  *
  */
@@ -179,11 +184,11 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 			x=read(b->bitio_fd, (void *)b->buf, sizeof(b->buf));
 			if (x<0) {	// on error
 				*stat= ((*stat)<<8)*(-1);	// see documentation
-				return ris;
+                return ris;
 			}
 			if (x==0) { // EOF reached
 				*stat= (*stat)*(-1);	// see documentation
-				return ris;
+                return ris;
 			}
 			if (x>0) {
 				// in read mode write index rappresent last readeble bit
@@ -195,9 +200,15 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 				dim_file=lseek(b->bitio_fd, 0, SEEK_END);
 				// reset the offest of the file in the previous position
 				lseek(b->bitio_fd, pos_att, SEEK_SET);
-				if (dim_file==pos_att) // if file is ended, delete padding
+				if (dim_file==pos_att) { // if file is ended, delete padding
 				// once pad is removed write index might not be multiple of 8 !
-					b->bitio_wp-=remove_padding( *( ((char*)b->buf)+x-1 ) );
+                    pos=remove_padding( *( ((char*)b->buf)+x-1 ) );
+                    if (pos==9) {
+                        *stat= ((*stat)<<16)*(-1);	// see documentation
+                        return ris;
+                    }
+                    b->bitio_wp-=pos;
+                }
 			}
 		}
 		pos=b->bitio_rp/(sizeof(b->buf[0])*8);	// get last word
@@ -218,7 +229,7 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 			want to read, that is nb-bit_da_leggere_old.
 		*/
 		bit_da_leggere= ( (b->bitio_wp - b->bitio_rp >= 64) || (pos!=(b->bitio_wp/(sizeof(b->buf[0])*8))) ) ? ( (64-ofs)<(nb-bit_da_leggere_old) ? (64-ofs) : (nb-bit_da_leggere_old) ) : ( (b->bitio_wp - b->bitio_rp)<(nb-bit_da_leggere_old) ? (b->bitio_wp - b->bitio_rp) : (nb-bit_da_leggere_old) ) ;
-		
+        
 		// make the mask used to write the bit we want in the word
 		mask=(bit_da_leggere==64) ? (0xFFFFFFFFFFFFFFFF) : ( (((uint64_t)1)<<bit_da_leggere)-1 );
 		// use the mask to read bit_da_leggere bit from d and shift them to the
@@ -276,7 +287,7 @@ bit_write(struct bitio *b, uint64_t x, unsigned int nb)
 		// calculate how many bit we can read now
 		bit_da_scrivere=(64-ofs)<nb ? (64-ofs) : nb;
 		// make the mask used to write the bit we want in the word
-		mask= (bit_da_scrivere==64) ? (0xFFFFFFFFFFFFFFFF) : ( (((uint64_t)1)<<bit_da_scrivere)-1 );
+		mask=(bit_da_scrivere==64) ? (0xFFFFFFFFFFFFFFFF) : ( (((uint64_t)1)<<bit_da_scrivere)-1 );
 		// use the mask to clean the positions in d where we will put new bit
 		d&=~(mask<<ofs);
 		// write the new bit at the correct offset in the word
@@ -336,42 +347,40 @@ fail:
 int
 bit_close(struct bitio *b)
 {
-	char *des=(char *)b->buf;
-	char fill, d;
+    char *des=(char *)b->buf;
+    char pad, mask;
 	int i;
 	if (!b || (b->bitio_fd < 0))	// if file is not properly initialized
 		return -1;
-	if (b->bitio_mode=='w' && b->bitio_wp!=0) {	// we add pad only in write mode
-		if (b->bitio_wp%8) {	// if bit are multiple of 8
-			fill=des[b->bitio_wp/8];	// get the last uncomplete byte
-			d=fill & (((char)1)<<((b->bitio_wp-1)%8));	// get last bit written
-		}
-		else {	// if bit are multiple of 8
-			fill=des[(b->bitio_wp/8)-1];	// get the last uncomplete byte
-			d=fill & 0x80;	// get last bit written
-		}
-		for (i=b->bitio_wp%8; i<8; i++)
-			if (d) // last valid bit=1
-				fill &= ~(((char)1)<<i);
-			else
-				fill |= (((char)1)<<i);
-		des[b->bitio_wp/8]=fill;	// update last byte
-		b->bitio_wp+=8-(b->bitio_wp%8);	// update write index
+	if (b->bitio_mode=='w') {	// we add pad only in write mode
+		if ((i=b->bitio_wp%8)) {	// if bit are not multiple of 8
+			mask=~(((char)0x80)>>(8-i-1));
+            pad=des[b->bitio_wp/8] & mask;	// get the last uncomplete byte, and clean it
+			for (++i; i<8; i++)
+                pad |= (((char)1)<<i);
+        }
+		else {	// if bits are multiple of 8
+            if (b->bitio_wp==sizeof(b->buf)*8)	// if the buf is full
+                if (bit_flush(b) < 0)			// flush the buffer
+                    goto fail;					// if error occur go to fail
+            pad=0xFE;	// shortcut to set the pad
+        }
 		
-		bit_flush(b);	// flush the buffer
-		if (!b->bitio_wp)	// flush must update write index to 0
+		des[b->bitio_wp/8]=pad;	// update last byte
+		b->bitio_wp+=8-(b->bitio_wp%8);	// update write index
+        
+		i=bit_flush(b);	// flush the buffer
+		if (b->bitio_wp)	// flush must update write index to 0
 			goto fail;
 	}
 	close(b->bitio_fd);	// close file
 	b->bitio_fd=0xFFFFFFFF;
 	free(b);
-	b=NULL;
 	return 0;	// on success return 0
 
 fail:
 	close(b->bitio_fd);	// close the file anyway
+    b->bitio_fd=0xFFFFFFFF;
 	free(b);
-	b->bitio_fd=0;
-	b=NULL;
 	return -1;
 }
