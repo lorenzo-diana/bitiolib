@@ -33,7 +33,7 @@ struct bitio * bit_open(const char *name, char mode);
  *				struct bitio = bit_open("filename");	// open the file
  *				uint64_t val = 0x0000000000000001;		// set only the least
  *														// significant bit
- *				uint64_t val = bit_write(file, value, 1);	// write 1 bit
+ *				int res = bit_write(file, value, 1);	// write 1 bit
  *
  *	@return	On success nb is returned, -1 on failure.
  */
@@ -59,8 +59,8 @@ int bit_write(struct bitio *b, uint64_t x, unsigned int nb);
  *				uint64_t val = bit_read(file, 1, &stat);	// read 1 bit
  *				val >> 1; 								// lose the bit just read
  *
- *			How stat parameter is update.
- *			stat will always contain the actual number of bits read.
+ *			How stat parameter is updated.
+ *			stat will always contain the actual number of bits readed.
  *			On success stat is a positive value that represents the number of
  *			bits read and stored in the returned value.
  *			If EOF is reached before reading nb bits, stat will contain the
