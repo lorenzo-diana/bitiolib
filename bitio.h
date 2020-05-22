@@ -18,7 +18,7 @@ struct bitio;
  *	@return	the pointer to the struct bitio rappresenting the opened file or
  *			NULL on failure.
  */
-struct bitio * bit_open(const char *name, char mode);
+struct bitio * bit_open(char **buf, size_t *len, char mode);
 
 /*	Try to write nb bit from x to the file rappresent by b. If nb is zero the
  *	function returns without doing anything; if nb is greater than 64 nb is set

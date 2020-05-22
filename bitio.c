@@ -20,25 +20,28 @@
 
 struct bitio	// structure that rappresents the bitio file
 {
-	int bitio_fd;	// file descriptor
+	FILE *bitio_fd;	// file descriptor
 	int bitio_mode;	// 'r' for read mode, 'w' for write mode
 	unsigned bitio_rp, bitio_wp;	// index of the next bit to read and write
 	uint64_t buf[ BITIO_BUF_WORDS ];	// buf size is 64*512= 32768 bit
 };
 
 struct bitio *
-bit_open(const char *name, char mode)
+bit_open(char **buf, size_t *len, char mode)
 {
 	struct bitio *ret=NULL;
-	if (!name || (mode!='r' && mode!='w')) {
+	if (!buf || (mode!='r' && mode!='w')) {
 		errno=EINVAL;	// errno will contain the error code
 		goto fail;
 	}
 	ret=calloc(1, sizeof(struct bitio)); // memory is cleared
 	if (!ret) // if calloc() fail
 		goto fail;
-	ret->bitio_fd=open(name, mode=='r' ? O_RDONLY : O_WRONLY | O_TRUNC | O_CREAT, 0666); // read & write for everyone
-	if (ret->bitio_fd<0) // if open() fail
+	if (mode=='r')
+		ret->bitio_fd=fmemopen(*buf, *len, "rb");
+	else
+		ret->bitio_fd=open_memstream(buf, len);
+	if (!ret->bitio_fd) // if open() fail
 		goto fail;
 	ret->bitio_mode=mode;
 	ret->bitio_rp=ret->bitio_wp; // reset read and write index
@@ -58,7 +61,7 @@ bit_flush(struct bitio *b)
 {
 	int len_bytes, x, left;
 	char *start, *dst;
-	if (!b || (b->bitio_mode != 'w') || (b->bitio_fd < 0)) {
+	if (!b || (b->bitio_mode != 'w') || (!b->bitio_fd)) {
 		errno=EINVAL;
 		return -1;
 	}
@@ -68,8 +71,8 @@ bit_flush(struct bitio *b)
 	start=dst=(char*)b->buf;	// start from beginning of the buffer
 	left=len_bytes;
 	for(;;) {	// untill we write len_bytes bytes
-		x=write(b->bitio_fd, start, left);	// try to write len_bytes bytes
-		if (x<0)
+        x=fwrite(start, 1, left, b->bitio_fd);	// try to write len_bytes bytes
+        if (ferror(b->bitio_fd))
 			goto fail;
 		start+=x;	// move forward buffer pointer
 		left-=x;	// decrease counter
@@ -130,25 +133,27 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 	do {
 		if (b->bitio_rp==b->bitio_wp) {	// if we have already read all the buf
 			b->bitio_rp=b->bitio_wp=0;	// reset read index
-			x=read(b->bitio_fd, (void *)b->buf, sizeof(b->buf));
-			if (x<0) {	// on error
-				*stat= ((*stat)<<8)*(-1);	// see documentation
-				return ris;
-			}
-			if (x==0) { // EOF reached
-				*stat= (*stat)*(-1);	// see documentation
-				return ris;
-			}
+			x=fread((void *)b->buf, 1, sizeof(b->buf), b->bitio_fd);
+            // if (x!=sizeof(b->buf)) then check for efo and error
+            if (!x && feof(b->bitio_fd)) { // EOF reached
+                *stat= (*stat)*(-1);	// see documentation
+                return ris;
+            }
+            if (ferror(b->bitio_fd)) {   // on error
+                *stat= ((*stat)<<8)*(-1);	// see documentation
+                return ris;
+            }
 			if (x>0) {
 				// in read mode write index rappresent last readeble bit
 				b->bitio_wp+=x*8;	// update write index
 				// determines whether we have read all the bytes of the file
 				// read actual position in the file
-				pos_att=lseek(b->bitio_fd, 0, SEEK_CUR);
+				pos_att=ftell(b->bitio_fd);
 				// read the position of the lastabyte in the file
-				dim_file=lseek(b->bitio_fd, 0, SEEK_END);
+                fseek(b->bitio_fd, 0, SEEK_END);
+                dim_file=ftell(b->bitio_fd);
 				// reset the offest of the file in the previous position
-				lseek(b->bitio_fd, pos_att, SEEK_SET);
+				fseek(b->bitio_fd, pos_att, SEEK_SET);
 				if (dim_file==pos_att) { // if file is ended, delete padding
 				// once pad is removed write index might not be multiple of 8 !
 					pos=remove_padding( *( ((char*)b->buf)+x-1 ) );
@@ -245,7 +250,7 @@ bit_close(struct bitio *b)
 	char *des=(char *)b->buf;
 	char pad, mask;
 	int i;
-	if (!b || (b->bitio_fd < 0))	// if file is not properly initialized
+	if (!b || (!b->bitio_fd))	// if file is not properly initialized
 		return -1;
 	if (b->bitio_mode=='w') {	// we add pad only in write mode
 		if ((i=b->bitio_wp%8)) {	// if bit are not multiple of 8
@@ -268,14 +273,14 @@ bit_close(struct bitio *b)
 		if (b->bitio_wp)	// flush must update write index to 0
 			goto fail;
 	}
-	close(b->bitio_fd);	// close file
-	b->bitio_fd=0xFFFFFFFF;
+	fclose(b->bitio_fd);	// close file
+	b->bitio_fd=0;
 	free(b);
 	return 0;	// on success return 0
 
 fail:
-	close(b->bitio_fd);	// close the file anyway
-	b->bitio_fd=0xFFFFFFFF;
+	fclose(b->bitio_fd);	// close the file anyway
+	b->bitio_fd=0;
 	free(b);
 	return -1;
 }
