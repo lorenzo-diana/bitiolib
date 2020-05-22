@@ -1,9 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "../bitio.h"
 
-#define TEST_FILE_NAME_1_BYTE "test_1.bin"
-#define TEST_FILE_NAME_2_BYTE "test_2.bin"
-#define TEST_FILE_NAME_0_BYTE "test_0.bin"
 #define data_value (uint64_t) 0x00000000DEADBEEF
 
 /*
@@ -11,9 +9,9 @@
  * At the end of this test the file size shuold be 1 byte: 1 bit of 
  * useful data and 7 bits of padding.
  */
-int test_1()
+int test_1(char **buf, size_t *len)
 {
-    struct bitio * f = bit_open(TEST_FILE_NAME_1_BYTE, 'w');
+    struct bitio * f = bit_open(buf, len, 'w');
     if (!f)
     {
         printf("Test 1 - Error on open!\n");
@@ -32,6 +30,12 @@ int test_1()
         return -3;
     }
     
+    if (*len!=1)
+	{
+		printf("Test 1 - Error data length!\n");
+		return -5;
+	}
+    
     return 0;
 }
 
@@ -39,11 +43,11 @@ int test_1()
  * Read the file previously created by test_1(), read one bit of useful data
  * from it, and compare it with the one writed by test_1().
  */
-int test_2()
+int test_2(char **buf, size_t *len)
 {
     uint64_t data_r;
     int stat=0;
-    struct bitio * f = bit_open(TEST_FILE_NAME_1_BYTE, 'r');
+    struct bitio * f = bit_open(buf, len, 'r');
     if (!f)
     {
         printf("Test 2 - Error on open!\n");
@@ -54,6 +58,8 @@ int test_2()
     if (stat != 1)
     {
         printf("Test 2 - Error on read!\n");
+		printf("stat: %d\n", stat);
+		printf("data: %d\n", stat);
         return -2;
     }
     
@@ -77,11 +83,11 @@ int test_2()
  * At the end of this test the file size shuold be 2 byte: 8 bits of
  * useful data and 8 bits of padding.
  */
-int test_3()
+int test_3(char **buf, size_t *len)
 {
     uint64_t data_r;
     int stat=0;
-    struct bitio * f = bit_open(TEST_FILE_NAME_2_BYTE, 'w');
+	struct bitio * f = bit_open(buf, len, 'w');
     if (!f)
     {
         printf("Test 3 - Error on first open!\n");
@@ -100,7 +106,13 @@ int test_3()
         return -3;
     }
     
-    f = bit_open(TEST_FILE_NAME_2_BYTE, 'r');
+    if (*len!=2)
+	{
+		printf("Test 3 - Error data length!\n");
+		return -5;
+	}
+	
+    f = bit_open(buf, len, 'r');
     if (!f)
     {
         printf("Test 3 - Error on second open!\n");
@@ -134,11 +146,11 @@ int test_3()
  * At the end of this test the file size shuold be 1 byte: 8 bits
  * of padding.
  */
-int test_4()
+int test_4(char **buf, size_t *len)
 {
 	uint64_t data_r;
 	int stat=0;
-	struct bitio * f = bit_open(TEST_FILE_NAME_0_BYTE, 'w');
+	struct bitio * f = bit_open(buf, len, 'w');
 	if (!f)
 	{
 		printf("Test 4 - Error on first open!\n");
@@ -157,7 +169,13 @@ int test_4()
 		return -3;
 	}
 	
-	f = bit_open(TEST_FILE_NAME_0_BYTE, 'r');
+	if (*len!=1)
+	{
+		printf("Test 4 - Error data length!\n");
+		return -5;
+	}
+	
+	f = bit_open(buf, len, 'r');
 	if (!f)
 	{
 		printf("Test 4 - Error on second open!\n");
@@ -189,28 +207,35 @@ int test_4()
 int main()
 {
     int res;
+    size_t len_buf;
+    char *buf=0;
     
-    res = test_1();
-    if (!res)
-        printf("test 1 ok\n");
-    else
-        printf("test 1 - error value: %d\n", res);
-    
-    res = test_2();
-    if (!res)
-        printf("test 2 ok\n");
-    else
-        printf("test 2 - error value: %d\n", res);
-    
-    res = test_3();
-    if (!res)
-        printf("test 3 ok\n");
-    else
-        printf("test 3 - error value: %d\n", res);
-    
-    res = test_4();
-    if (!res)
-        printf("test 4 ok\n");
-    else
-        printf("test 4 - error value: %d\n", res);
+    res = test_1(&buf, &len_buf);
+	if (!res)
+		printf("test 1 ok\n");
+	else
+		printf("test 1 - error value: %d\n", res);
+	
+	res = test_2(&buf, &len_buf);
+	if (!res)
+		printf("test 2 ok\n");
+	else
+		printf("test 2 - error value: %d\n", res);
+	free(buf);
+	
+	res = test_3(&buf, &len_buf);
+	if (!res)
+		printf("test 3 ok\n");
+	else
+		printf("test 3 - error value: %d\n", res);
+	free(buf);
+	
+	res = test_4(&buf, &len_buf);
+	if (!res)
+		printf("test 4 ok\n");
+	else
+		printf("test 4 - error value: %d\n", res);
+	free(buf);
+	
+	return 0;
 }
