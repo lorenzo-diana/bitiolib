@@ -1,5 +1,5 @@
-CCFLAGS = -O3 -Wall -Werror
-#CCFLAGS = -O0 -g
+#CCFLAGS = -O3 -Wall -Werror
+CCFLAGS = -O0 -g
 
 all: test
 clean:
