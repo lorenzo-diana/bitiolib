@@ -90,7 +90,7 @@ int test_3()
     
     if (bit_write(f, data_value, 8) != 8)
     {
-        printf("Test 1 - Error on write!\n");
+        printf("Test 3 - Error on write!\n");
         return -2;
     }
     
