@@ -195,7 +195,7 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 int
 bit_write(struct bitio *b, uint64_t x, unsigned int nb)
 {
-	unsigned int pos, ofs, nb2=nb, bit_da_scrivere;
+	unsigned int pos, ofs, nb2, bit_da_scrivere;
 	uint64_t d, mask;
 	if (nb==0)	// we can write from 1 to 64 bit
 		return 0;
@@ -203,6 +203,7 @@ bit_write(struct bitio *b, uint64_t x, unsigned int nb)
 		nb=64;
 	if (!b || b->bitio_mode!='w')	// if we are not in write mode, return
 		goto fail;
+	nb2=nb;
 	do {
 		if (b->bitio_wp==sizeof(b->buf)*8)	// if we reached the end of the buf
 			if (bit_flush(b) < 0)			// flush the buffer
