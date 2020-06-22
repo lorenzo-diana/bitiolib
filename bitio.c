@@ -57,12 +57,12 @@
 
 #define NUM_BIT_BUFTYPE (sizeof(buftype_t)*8)
 
-struct bitio	// structure that rappresents the bitio file
+struct bitio	// structure that rappresents the bitio object
 {
 	int bitio_mode;	// 'r' for read mode, 'w' for write mode
 	unsigned bitio_rp, bitio_wp;	// index of the next bit to read and write
-	buftype_t *buf;	// buf size is 64*512= 32768 bit
-	size_t len_buf;
+	buftype_t *buf;	// pointer to the buffer used to read/write data
+	size_t len_buf;	// length (in bytes) of the buffer
 };
 
 /*	Returns the number of bits that rappresent the pad.
@@ -90,7 +90,7 @@ bit_open(char *buf, size_t len, char mode)
 {
 	struct bitio *ret=NULL;
 	unsigned int pos;
-	if (!buf || (mode!='r' && mode!='w')) {
+	if (!buf || (mode!='r' && mode!='w') || len==0) {
 		errno=EINVAL;	// errno will contain the error code
 		goto fail;
 	}
@@ -99,12 +99,14 @@ bit_open(char *buf, size_t len, char mode)
 		goto fail;
 	ret->buf = (buftype_t *) buf;
 	ret->bitio_mode=mode;
-	ret->bitio_rp=0;
+	ret->bitio_rp=0; // reset read index
 	if (mode=='r') {
 		pos=remove_padding( *( ((char*)ret->buf)+len-1 ) );
-		if (pos==9)
+		if (pos==9) {
+			errno=EINVAL;
 			goto fail; // non valid pad value
-		ret->bitio_wp=len*8 - pos; // reset read and write index
+		}
+		ret->bitio_wp=len*8 - pos; // reset write index
 		ret->len_buf=len;
 	}
 	else {
@@ -135,12 +137,11 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 	if (!b || b->bitio_mode!='r')	// if we are not in read mode, return
 		return MASK_BUFTYPE;
 	do {
-		if (b->bitio_rp==b->bitio_wp) {
+		if (b->bitio_rp==b->bitio_wp) {	// end of the buffer
 			*stat= (*stat)*(-1);	// see documentation
            	return ris;
         }
-
-		//int aaa=NUM_BIT_BUFTYPE;
+        
 		pos=b->bitio_rp/NUM_BIT_BUFTYPE;	// get last word
 		ofs=b->bitio_rp%NUM_BIT_BUFTYPE;	// offset in the last word
 		
@@ -148,10 +149,10 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 		
 		/*
 			Calculate how many bits we can read now:
-			If write and read inexes are spaced more than 64 bit or they are in
-			different word then max number of bits that we can read is 64-ofs,
-			otherwise is the difference between the two indexes, that is
-			b->bitio_wp - b->bitio_rp.
+			If write and read inexes are spaced more than NUM_BIT_BUFTYPE
+			bit or they are in different word then max number of bits that
+			we can read is NUM_BIT_BUFTYPE-ofs, otherwise is the difference
+			between the two indexes, that is b->bitio_wp - b->bitio_rp.
 			Now we must compare this value with the max number of bits that we
 			want to read, that is nb-bit_da_leggere_old.
 		*/
@@ -164,10 +165,10 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 		ris|=((d&(mask<<ofs))>>ofs)<<bit_da_leggere_old;
 		*stat=(*stat)+bit_da_leggere;	// update status of the read operation
 		bit_da_leggere_old+=bit_da_leggere;	// rememer how many bit we have read
-		b->bitio_rp+=bit_da_leggere;	// update write index
-	} while (nb!=(*stat));	// we pretend to read nb bit, unless we get an error
-							// or we reach the end of the file
-	return ris;	// return the word containing the read bit
+		b->bitio_rp+=bit_da_leggere;	// update read index
+	} while (nb!=(*stat));	// we pretend to read nb bit,
+							// unless we reach the end of the buffer
+	return ris;	// return the word containing the read bits
 }
 
 int
@@ -181,7 +182,7 @@ bit_write(struct bitio *b, buftype_t x, unsigned int nb)
 		goto fail;
 	if (b->bitio_wp+nb > b->len_buf*8 - 1)
 		nb=b->len_buf*8 - 1 - b->bitio_wp;
-	if (nb==0)	// we can write from 1 to 64 bit
+	if (nb==0)	// we can write from 1 to NUM_BIT_BUFTYPE bit
 		return 0;
 	nb2=nb;
 	do {
@@ -206,8 +207,9 @@ bit_write(struct bitio *b, buftype_t x, unsigned int nb)
 		b->bitio_wp+=bit_da_scrivere;	// update write index
 		
 		b->buf[pos]=d;	// update last word in the buffer
-	} while (nb-=bit_da_scrivere);	// continue until we write nb bit
-	return nb2;	// return the number of bit written
+	} while (nb-=bit_da_scrivere);	// continue until we write nb bit,
+									// or we reach the end of the buf
+	return nb2;	// return the number of bits written
 
 fail:
 	return -1;
@@ -219,7 +221,7 @@ bit_close(struct bitio *b, size_t *len)
 	char *des=(char *)b->buf;
 	char pad, mask;
 	int i;
-	if (!b) // || (!b->bitio_fd))	// if file is not properly initialized
+	if (!b)	// if file is not properly initialized
 		return -1;
 	if (b->bitio_mode=='w') {	// we add pad only in write mode
 		if ((i=b->bitio_wp%8)) {	// if bit are not multiple of 8
