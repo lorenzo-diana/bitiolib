@@ -44,7 +44,7 @@ struct bitio * bit_open(char *buf, size_t len, char mode);
  *				struct bitio f = bit_open(buf, len, 'w');	// open the mem buf
  *				uint64_t val = 0x0000000000000001;			// set only the least
  *															// significant bit
- *				int res = bit_write(f, value, 1);			// write 1 bit
+ *				int res = bit_write(f, val, 1);			  // write 1 bit
  *
  *	@return	On success a positive number rappresenting the number of bits
  *			written is returned. On failure -1 is returned.
