@@ -30,10 +30,10 @@ struct bitio * bit_open(const char *name, char mode);
  *			the least significant bit, the second bit is the second least
  *			significant bit, and so on.
  *			Example: If we want to write only 1 bit.
- *				struct bitio = bit_open("filename");	// open the file
- *				uint64_t val = 0x0000000000000001;		// set only the least
- *														// significant bit
- *				int res = bit_write(file, value, 1);	// write 1 bit
+ *				struct bitio f = bit_open("filename", 'w');	// open the file
+ *				uint64_t val = 0x0000000000000001;			// set only the least
+ *															// significant bit
+ *				int res = bit_write(f, val, 1);				// write 1 bit
  *
  *	@return	On success nb is returned, -1 on failure.
  */
@@ -55,9 +55,9 @@ int bit_write(struct bitio *b, uint64_t x, unsigned int nb);
  *			Example: If we read only 1 bit and then we apply right shift we lose
  *					 the bit read.
  *				int stat;
- *				struct bitio = bit_open("filename");		// open the file
- *				uint64_t val = bit_read(file, 1, &stat);	// read 1 bit
- *				val >> 1; 								// lose the bit just read
+ *				struct bitio f = bit_open("filename", 'r');	// open the file
+ *				uint64_t val = bit_read(f, 1, &stat);		// read 1 bit
+ *				val >> 1; 							// lose the bit just read
  *
  *			How stat parameter is updated.
  *			stat will always contain the actual number of bits readed.
@@ -73,8 +73,8 @@ int bit_write(struct bitio *b, uint64_t x, unsigned int nb);
  */
 uint64_t bit_read(struct bitio *b, unsigned int nb, int *stat);
 
-/*	Close the file rappresented by b. The pad is added and then the buffer
- *	is flushed.
+/*	Close the file rappresented by b. In write mode the pad is added and
+ *	then the buffer is flushed.
  *
  *	@param	b, pointer to a bitio file.
  *
@@ -94,8 +94,8 @@ uint64_t bit_read(struct bitio *b, unsigned int nb, int *stat);
  *	 add 8 bit of pad.
  *		bit of pad:		1111 1110
  *
- *	How to remove pad.
- *	When bit_read() reads the last byte from the file it is passed to
+ *	The pad is automatically removed during reading operations. In particular
+ *	when bit_read() reads the last byte from the file it is passed to
  *	remove_padding() to get the number of bits to be removed.
  */
 int bit_close(struct bitio *b);
