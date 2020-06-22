@@ -20,8 +20,8 @@ struct bitio;
  * 			In write mode is a pointer to a pointer that will be updated
  * 			with the address of the created memory buffer.
  * 			len, in read mode is the length of the buffer poited by buf.
- * 			It must be the value set by bit_close() when the buffer
- * 			was written.
+ * 			It must be the value set to len after bit_close() was
+ * 			called last time the buffer was written.
  * 			In write mode it will contain the length of the created memory
  * 			buffer when bit_close() will be called.
  *			mode, a char that rappresent the mode to open the memory
