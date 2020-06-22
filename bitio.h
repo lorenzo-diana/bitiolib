@@ -20,6 +20,8 @@ struct bitio;
  * 			In write mode is a pointer to a pointer that will be updated
  * 			with the address of the created memory buffer.
  * 			len, in read mode is the length of the buffer poited by buf.
+ * 			It must be the value set by bit_close() when the buffer
+ * 			was written.
  * 			In write mode it will contain the length of the created memory
  * 			buffer when bit_close() will be called.
  *			mode, a char that rappresent the mode to open the memory
@@ -40,10 +42,10 @@ struct bitio * bit_open(char **buf, size_t *len, char mode);
  *			the least significant bit, the second bit is the second least
  *			significant bit, and so on.
  *			Example: If we want to write only 1 bit.
- *				struct bitio = bit_open("filename");	// open the mem buf
- *				uint64_t val = 0x0000000000000001;		// set only the least
- *														// significant bit
- *				int res = bit_write(file, value, 1);	// write 1 bit
+ *				struct bitio f = bit_open(buf, len, 'w');	// open the mem buf
+ *				uint64_t val = 0x0000000000000001;			// set only the least
+ *															// significant bit
+ *				int res = bit_write(f, val, 1);				// write 1 bit
  *
  *	@return	On success nb is returned, -1 on failure.
  */
@@ -65,8 +67,8 @@ int bit_write(struct bitio *b, uint64_t x, unsigned int nb);
  *			Example: If we read only 1 bit and then we apply right shift we lose
  *					 the bit read.
  *				int stat;
- *				struct bitio = bit_open("filename");		// open the mem buf
- *				uint64_t val = bit_read(file, 1, &stat);	// read 1 bit
+ *				struct bitio f = bit_open(buf, len, 'r');	// open the mem buf
+ *				uint64_t val = bit_read(f, 1, &stat);		// read 1 bit
  *				val >> 1; 								// lose the bit just read
  *
  *			How stat parameter is updated.
@@ -83,8 +85,8 @@ int bit_write(struct bitio *b, uint64_t x, unsigned int nb);
  */
 uint64_t bit_read(struct bitio *b, unsigned int nb, int *stat);
 
-/*	Close the memory buffer rappresented by b. The pad is added and then the
- *	data is flushed.
+/*	Close the memory buffer rappresented by b. In write mode the pad
+ *	is added and then the data is flushed.
  *
  *	@param	b, pointer to a bitio structure.
  *
@@ -105,8 +107,8 @@ uint64_t bit_read(struct bitio *b, unsigned int nb, int *stat);
  *	 add 8 bit of pad.
  *		bit of pad:		1111 1110
  *
- *	How to remove pad.
- *	When bit_read() reads the last byte from the memory buffer it is passed to
+ *	The pad is automatically removed during reading operations. In particular
+ *	when bit_read() reads the last byte from the memory buffer it is passed to
  *	remove_padding() to get the number of bits to be removed.
  */
 int bit_close(struct bitio *b);

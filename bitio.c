@@ -18,9 +18,9 @@
 // size of the internal buf where data are stored before flush it to the file
 #define BITIO_BUF_WORDS 512
 
-struct bitio	// structure that rappresents the bitio file
+struct bitio	// structure that rappresents the bitio object
 {
-	FILE *bitio_fd;	// file descriptor
+	FILE *bitio_fd;	// memory buffer descriptor
 	int bitio_mode;	// 'r' for read mode, 'w' for write mode
 	unsigned bitio_rp, bitio_wp;	// index of the next bit to read and write
 	uint64_t buf[ BITIO_BUF_WORDS ];	// buf size is 64*512= 32768 bit
@@ -30,7 +30,7 @@ struct bitio *
 bit_open(char **buf, size_t *len, char mode)
 {
 	struct bitio *ret=NULL;
-	if (!buf || (mode!='r' && mode!='w')) {
+	if (!buf || (mode!='r' && mode!='w') || (mode=='r' && !len) || (mode=='r' && !(*buf))) {
 		errno=EINVAL;	// errno will contain the error code
 		goto fail;
 	}
@@ -41,7 +41,7 @@ bit_open(char **buf, size_t *len, char mode)
 		ret->bitio_fd=fmemopen(*buf, *len, "rb");
 	else
 		ret->bitio_fd=open_memstream(buf, len);
-	if (!ret->bitio_fd) // if open() fail
+	if (!ret->bitio_fd)
 		goto fail;
 	ret->bitio_mode=mode;
 	ret->bitio_rp=ret->bitio_wp; // reset read and write index
@@ -134,7 +134,7 @@ bit_read(struct bitio *b, unsigned int nb, int *stat)
 		if (b->bitio_rp==b->bitio_wp) {	// if we have already read all the buf
 			b->bitio_rp=b->bitio_wp=0;	// reset read index
 			x=fread((void *)b->buf, 1, sizeof(b->buf), b->bitio_fd);
-            // if (x!=sizeof(b->buf)) then check for efo and error
+			
             if (!x && feof(b->bitio_fd)) { // EOF reached
                 *stat= (*stat)*(-1);	// see documentation
                 return ris;
